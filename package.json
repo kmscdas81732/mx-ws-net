@@ -1,0 +1,23 @@
+{
+  "name": "@mxgame/wsnet",
+  "version": "1.0.4",
+  "description": "a websocket lib for mxgate network",
+  "main": "dist/index.js",
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org/"
+  },
+  "scripts": {
+    "prepublish": "tsc -p tsconfig.json"
+  },
+  "files": [
+    "dist/**/*",
+    "libs/**/*"
+  ],
+  "author": "dreamduke.com",
+  "license": "ISC",
+  "dependencies": {
+    "pako": "^2.1.0",
+    "@types/pako": "^2.0.0",
+    "protobufjs": "^7.2.3"
+  }
+}
