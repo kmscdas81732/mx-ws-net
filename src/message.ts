@@ -1,6 +1,7 @@
 import { gzip, ungzip } from 'pako'
-import { IMessageManager, Messagev0, Messagev0P, Messagev1, Messagev2 } from './manager'
+import { IMessageManager, MessageCMD, Messagev0, Messagev0P, Messagev1, Messagev2 } from './manager'
 import { Utf8ArrayToStr } from './coder'
+import * as ppbjs from '../libs/message.pb'
 
 // 消息对象
 export class MessageUnit {
@@ -41,24 +42,50 @@ export class MessageUnit {
 
     unmarshalv2(): Messagev2 | null {
         let ver = this.version()
-        if (ver != 2) return null
+        if (ver != ppbjs.cn.moxi.middle.bytecoder.Version.VERSION_2) return null
         return this.manager.unmarshalMessage(this.sourceData, ver) as Messagev2
     }
 
     unmarshalv1(): Messagev1 | null {
         let ver = this.version()
-        if (ver != 1) return null
+        if (ver != ppbjs.cn.moxi.middle.bytecoder.Version.VERSION_1) return null
         return this.manager.unmarshalMessage(this.sourceData, ver) as Messagev1
     }
 
     unmarshalv0(): Messagev0P {
         let ver = this.version()
-        if (ver != 0) return { code: 0, message: "version error" }
+        if (ver != ppbjs.cn.moxi.middle.bytecoder.Version.VERSION_0_UNSPECIFIED) return {
+            code: 0,
+            message: "version error"
+        }
 
         let v = this.manager.unmarshalMessage(this.sourceData, ver) as Messagev0
-        return {
-            code: v.code,
-            message: Utf8ArrayToStr(v.message)
+        if (!v.code || !v.message) {
+            return { code: 0, message: "unmarshal error" }
+        } else {
+            return {
+                code: v.code,
+                message: Utf8ArrayToStr(v.message)
+            }
+        }
+    }
+
+    unmarshalCmd(): {
+        cmd: ppbjs.cn.moxi.middle.bytecoder.MsgLocalCmd,
+        message: Uint8Array
+    } {
+        let ver = this.version()
+        if (ver != ppbjs.cn.moxi.middle.bytecoder.Version.VERSION_CMD) {
+            throw new Error("version error")
+        }
+        let v = this.manager.unmarshalMessage(this.sourceData, ver) as MessageCMD
+        if (!v.cmd || !v.body) {
+            throw new Error("unmarshal error")
+        } else {
+            return {
+                cmd: v.cmd,
+                message: v.body
+            }
         }
     }
 }

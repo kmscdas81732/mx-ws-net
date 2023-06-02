@@ -5,9 +5,6 @@ interface EventData {
 }
 
 
-/**
- * 单例模式
- */
 export class EventEmitter {
     /**
      * 事件存储 Map
@@ -41,7 +38,7 @@ export class EventEmitter {
      */
     public emit(eventName: string, data?: any) {
         if (!this.eventsMap.has(eventName)) {
-            console.warn(`$(eventName) 事件不存在`);
+            // console.warn(`${eventName} 事件不存在`);
             return;
         }
         let pools = this.eventsMap.get(eventName) || [];
@@ -69,7 +66,7 @@ export class EventEmitter {
      */
     public off(eventName: string, func: Function) {
         if (!this.eventsMap.has(eventName)) {
-            console.warn(`$(eventName) 事件不存在`);
+            // console.warn(`${eventName} 事件不存在`);
             return;
         }
         let pools = this.eventsMap.get(eventName) || [];

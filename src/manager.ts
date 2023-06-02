@@ -1,151 +1,35 @@
-import * as pbjs from 'protobufjs'
-import * as ppbjs from '../libs/proto_pb'
-import { ungzip } from 'pako'
+import * as ppbjs from '../libs/message.pb'
 import { MessageUnit } from './message'
-import { Utf8ArrayToStr } from './coder'
 //通用消息头
 export interface Message { version: number, requestId: number }
 //应答消息格式
-export interface Messagev0 { version: number, requestId: number, code: number, message: Uint8Array }
+export type Messagev0 = ppbjs.cn.moxi.middle.bytecoder.IMessagev0
+export type MessageCMD = ppbjs.cn.moxi.middle.bytecoder.IMessageCMD
 //解析过的应答消息格式
 export interface Messagev0P { code: number, message: string }
 //发起请求的消息v1
-export interface Messagev1 { version: number, requestId: number, method: string, responseHeader: boolean, route: string, body: Uint8Array, header: { [x: string]: string } }
+export type Messagev1 = ppbjs.cn.moxi.middle.bytecoder.IMessagev1
 //发起请求的消息v2
-export interface Messagev2 { version: number, requestId: number, responseHeader: boolean, cmd: number, body: Uint8Array, header: { [x: string]: string } }
+export type Messagev2 = ppbjs.cn.moxi.middle.bytecoder.IMessagev2
 
 
 export interface IMessageManager {
-    parseVersion(sourceData: Uint8Array): number
+    parseVersion(sourceData: Uint8Array): ppbjs.cn.moxi.middle.bytecoder.Version
     parseRequestId(sourceData: Uint8Array): number
 
     unmarshal(sourceData: Uint8Array): MessageUnit
 
-    unmarshalMessage(sourceData: Uint8Array, v?: number): Messagev0 | Messagev1 | Messagev2
+    unmarshalMessage(sourceData: Uint8Array, v?: ppbjs.cn.moxi.middle.bytecoder.Version): Messagev0 | Messagev1 | Messagev2 | MessageCMD
     marshalv1(obj: Partial<Messagev1>): MessageUnit
     marshalv2(obj: Messagev2): MessageUnit
+    marshalCmd(obj: MessageCMD): MessageUnit
     marshal(obj: Partial<Message | Messagev0 | Messagev1 | Messagev2>): MessageUnit
+    unmarshalWaitInfo(bytecoder: Uint8Array): { self: number, total: number }
 }
 
 export type ManagerMode = "dynamic" | "static"
 
-export function CreateManager(mode: "dynamic" | "static", data: Uint8Array): IMessageManager {
-    if (mode == "dynamic") {
-        return new MessageManager(data)
-    } else {
-        return new MessageManager2()
-    }
-}
-
-class MessageManager {
-    private messagev0: pbjs.Type
-    private messagev1: pbjs.Type
-    private messagev2: pbjs.Type
-    private message: pbjs.Type
-
-    private requestId = 1
-
-    constructor(data: Uint8Array) {
-        let pfFile = Utf8ArrayToStr(ungzip(data))
-        let pbRoot = new pbjs.Root
-        pbjs.parse(pfFile, pbRoot)
-        let m = pbRoot.lookupType('bytecoder.Message')
-        if (m) {
-            this.message = m
-        } else {
-            throw "协议错误"
-        }
-
-        let m0 = pbRoot.lookupType('bytecoder.Messagev0')
-        if (m0) {
-            this.messagev0 = m0
-        } else {
-            throw "协议错误"
-        }
-
-        let m1 = pbRoot.lookupType('bytecoder.Messagev1')
-        if (m1) {
-            this.messagev1 = m1
-        } else {
-            throw "协议错误"
-        }
-
-        let m2 = pbRoot.lookupType('bytecoder.Messagev2')
-        if (m2) {
-            this.messagev2 = m2
-        } else {
-            throw "协议错误"
-        }
-    }
-
-    parseVersion(sourceData: Uint8Array) {
-        let message: Message = this.message.decode(sourceData) as any
-        return message.version
-    }
-
-    parseRequestId(sourceData: Uint8Array) {
-        let message: Message = this.message.decode(sourceData) as any
-        return message.requestId
-    }
-
-
-    unmarshal(sourceData: Uint8Array): MessageUnit {
-        let msg = new MessageUnit(this)
-        msg.loadGzip(sourceData)
-        return msg
-    }
-
-    unmarshalMessage(sourceData: Uint8Array, v?: number): Messagev0 | Messagev1 | Messagev2 {
-        if (v === undefined) {
-            v = this.parseVersion(sourceData)
-        }
-        let message: any;
-        switch (v) {
-            case 0:
-                message = this.messagev0.decode(sourceData)
-                break
-            case 1:
-                message = this.messagev1.decode(sourceData)
-                break
-            case 2:
-                message = this.messagev2.decode(sourceData)
-                break
-            default:
-                throw "未知消息"
-        }
-
-        return message
-    }
-
-    marshalv1(obj: Partial<Messagev1>) {
-        obj.version = 1
-        obj.requestId = this.requestId++
-        return this.marshal(obj)
-    }
-
-    marshalv2(obj: Messagev2) {
-        obj.version = 2
-        obj.requestId = this.requestId++
-        return this.marshal(obj)
-    }
-
-    marshal(obj: Partial<Message | Messagev0 | Messagev1 | Messagev2>): MessageUnit {
-        let bf: Uint8Array
-        switch (obj.version) {
-            case 0: bf = this.messagev0.encode(obj).finish(); break;
-            case 1: bf = this.messagev1.encode(obj).finish(); break;
-            case 2: bf = this.messagev2.encode(obj).finish(); break;
-            default: throw "未知消息"
-        }
-
-        let ut = new MessageUnit(this)
-        ut.loadBuffer(bf)
-        return ut
-    }
-}
-
-
-class MessageManager2 implements IMessageManager {
+export class MessageManager implements IMessageManager {
     private requestId = 1
     constructor() {
 
@@ -167,20 +51,30 @@ class MessageManager2 implements IMessageManager {
         return msg
     }
 
-    unmarshalMessage(sourceData: Uint8Array, v?: number): Messagev0 | Messagev1 | Messagev2 {
+    unmarshalWaitInfo(bytecoder: Uint8Array): { self: number, total: number } {
+        let message = ppbjs.cn.moxi.middle.bytecoder.MessageWaitInfo.decode(bytecoder)
+        // let message = JSON.parse(Utf8ArrayToStr(bytecoder))
+
+        return { self: message.self as number, total: message.total as number }
+    }
+
+    unmarshalMessage(sourceData: Uint8Array, v?: ppbjs.cn.moxi.middle.bytecoder.Version): Messagev0 | Messagev1 | Messagev2 {
         if (v === undefined) {
             v = this.parseVersion(sourceData)
         }
         let message: any;
         switch (v) {
-            case 0:
+            case ppbjs.cn.moxi.middle.bytecoder.Version.VERSION_0_UNSPECIFIED:
                 message = ppbjs.cn.moxi.middle.bytecoder.Messagev0.decode(sourceData)
                 break
-            case 1:
+            case ppbjs.cn.moxi.middle.bytecoder.Version.VERSION_1:
                 message = ppbjs.cn.moxi.middle.bytecoder.Messagev1.decode(sourceData)
                 break
-            case 2:
+            case ppbjs.cn.moxi.middle.bytecoder.Version.VERSION_2:
                 message = ppbjs.cn.moxi.middle.bytecoder.Messagev2.decode(sourceData)
+                break
+            case ppbjs.cn.moxi.middle.bytecoder.Version.VERSION_CMD:
+                message = ppbjs.cn.moxi.middle.bytecoder.MessageCMD.decode(sourceData)
                 break
             default:
                 throw "未知消息"
@@ -190,13 +84,19 @@ class MessageManager2 implements IMessageManager {
     }
 
     marshalv1(obj: Partial<Messagev1>) {
-        obj.version = 1
+        obj.version = ppbjs.cn.moxi.middle.bytecoder.Version.VERSION_1
         obj.requestId = this.requestId++
         return this.marshal(obj)
     }
 
     marshalv2(obj: Messagev2) {
-        obj.version = 2
+        obj.version = ppbjs.cn.moxi.middle.bytecoder.Version.VERSION_2
+        obj.requestId = this.requestId++
+        return this.marshal(obj)
+    }
+
+    marshalCmd(obj: MessageCMD) {
+        obj.version = ppbjs.cn.moxi.middle.bytecoder.Version.VERSION_CMD
         obj.requestId = this.requestId++
         return this.marshal(obj)
     }
@@ -204,9 +104,10 @@ class MessageManager2 implements IMessageManager {
     marshal(obj: Partial<Message | Messagev0 | Messagev1 | Messagev2>): MessageUnit {
         let bf: Uint8Array
         switch (obj.version) {
-            case 0: bf = ppbjs.cn.moxi.middle.bytecoder.Messagev0.encode(obj).finish(); break;
-            case 1: bf = ppbjs.cn.moxi.middle.bytecoder.Messagev1.encode(obj).finish(); break;
-            case 2: bf = ppbjs.cn.moxi.middle.bytecoder.Messagev2.encode(obj).finish(); break;
+            case ppbjs.cn.moxi.middle.bytecoder.Version.VERSION_0_UNSPECIFIED: bf = ppbjs.cn.moxi.middle.bytecoder.Messagev0.encode(obj).finish(); break;
+            case ppbjs.cn.moxi.middle.bytecoder.Version.VERSION_1: bf = ppbjs.cn.moxi.middle.bytecoder.Messagev1.encode(obj).finish(); break;
+            case ppbjs.cn.moxi.middle.bytecoder.Version.VERSION_2: bf = ppbjs.cn.moxi.middle.bytecoder.Messagev2.encode(obj).finish(); break;
+            case ppbjs.cn.moxi.middle.bytecoder.Version.VERSION_CMD: bf = ppbjs.cn.moxi.middle.bytecoder.MessageCMD.encode(obj).finish(); break;
             default: throw "未知消息"
         }
 
