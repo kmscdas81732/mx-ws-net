@@ -215,8 +215,9 @@ export class MxWsNet extends EventEmitter implements IWsConn {
                     }
                     if (this.waitInterval && this.waitInterval > 0) {
                         this.queryIt = setInterval(async () => {
-                            let body = await this.WaitStatus()
-                            this.emit("waiting", { self: body.self, total: body.total })
+                            this.WaitStatus().then(body => {
+                                this.emit("waiting", { self: body.self, total: body.total })
+                            })
                         }, this.waitInterval)
                     }
                 } else {
@@ -281,7 +282,12 @@ export class MxWsNet extends EventEmitter implements IWsConn {
             clearInterval(this.updateIt)
             this.updateIt = 0
         }
-        this.emit('close')
+
+        if (this.queryIt) {
+            clearInterval(this.queryIt)
+            this.queryIt = 0
+        }
+        this.emit('closed')
     }
 
     private onError(localId: number, e: Event) {
@@ -300,7 +306,7 @@ export class MxWsNet extends EventEmitter implements IWsConn {
      */
     async SendMessage<Q, T>(method: string, route: string, body: Q, timeout?: number) {
         if (!this.conn) {
-            throw { message: "网路没链接" }
+            return Promise.reject({ message: "网路没链接" })
         }
 
         let msg = this.msgMgr.marshalv1({
@@ -335,7 +341,7 @@ export class MxWsNet extends EventEmitter implements IWsConn {
 
     WaitStatus() {
         if (!this.conn) {
-            throw { message: "网路没链接" }
+            return Promise.reject({ message: "网路没链接" })
         }
 
         let msg = this.msgMgr.marshalCmd({

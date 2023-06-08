@@ -1,6 +1,6 @@
 {
   "name": "@mxgame/wsnet",
-  "version": "1.0.6",
+  "version": "1.0.9",
   "description": "a websocket lib for mxgate network",
   "main": "dist/index.js",
   "publishConfig": {
